@@ -74,41 +74,41 @@ local function GetSortPriority(item)
     if IsKindOf(item, "Ammo") then return 4 end
 
 	if class == "FlareAmmo" then return 5 end
-    
+
 	-- Mortar shells
    	if string.starts_with(class, "MortarShell_") then return 6 end
 
 	-- Warheads
 	if class == "Warhead_Frag" then return 7 end
-    
+
 	-- 40mm shells
    	if string.starts_with(class, "_40mm") then return 8 end
-    
+
     -- Explosives
     if class == "C4" or class == "PETN" or class == "TNT" then return 9 end
-    
+
     -- Detonators
-    if class == "Combination_Detonator_Proximity" or 
-       class == "Combination_Detonator_Remote" or 
+    if class == "Combination_Detonator_Proximity" or
+       class == "Combination_Detonator_Remote" or
        class == "Combination_Detonator_Time" then return 10 end
-    
+
     -- Armor upgrades
-    if class == "Combination_CeramicPlates" or 
-       class == "Combination_WeavePadding" or 
+    if class == "Combination_CeramicPlates" or
+       class == "Combination_WeavePadding" or
        class == "Combination_Kompositum58" then return 11 end
-    
+
     -- Weapon parts / Utility
-    if class == "Combination_BalancingWeight" or class == "Combination_Sharpener" then return 12 end   
-    
+    if class == "Combination_BalancingWeight" or class == "Combination_Sharpener" then return 12 end
+
     -- Weapon parts / Utility
     if class == "FineSteelPipe" or class == "OpticalLens" or class == "Microchip" then return 13 end
-    
+
     -- Skill Magazines
     if string.starts_with(class, "SkillMag_") then return 14 end
-    
+
     -- Consumables
     if class == "MetaviraShot" or class == "CombatStim" then return 15 end
-    
+
     -- Valuables
     if IsKindOf(item, "Valuables") or class == "MoneyBag" then
         if IsKindOf(item, "InventoryStack") then
@@ -117,7 +117,7 @@ local function GetSortPriority(item)
             return 17
         end
     end
-    
+
     return 100 -- Default for unknown items
 end
 
@@ -130,9 +130,9 @@ end
 --- @param addClass boolean Whether to add (true) or remove (false) the SquadBagItemClass from inheritance.
 function SquadBagDoneRight:PatchClassInheritance(className, addClass)
 	local classObj = g_Classes[className]
-   	if not classObj then 
+   	if not classObj then
 		-- print("[SBDR] PatchClassInheritance: Class " .. tostring(className) .. " not found.")
-		return 
+		return
 	end
 
 	-- 1. CLONE __parents to avoid leaking to other MiscItem children (MetaviraShot, etc.)
@@ -275,7 +275,7 @@ function SquadBagDoneRight:UpdateProperties()
 	end
 
 	self:EvictInvalidItems()
-	
+
 	if options.sbdr_auto_move_to_bag then
 		self:MoveAllMercsInventoryToSquadBag()
 	end
@@ -330,11 +330,11 @@ function _SortItemsInBag(squad_id)
 	table.sort(all_items, function(a, b)
 		local priority_a = GetSortPriority(a)
 		local priority_b = GetSortPriority(b)
-		
+
 		if priority_a ~= priority_b then
 			return priority_a < priority_b
 		end
-		
+
 		-- Within the same priority group, secondary sorting
 		if priority_a == 4 then -- Ammo
 			local caliber_a = a.Caliber
@@ -378,9 +378,9 @@ function _SortItemsInBag(squad_id)
 end
 
 -- Patching ItemIsFound to include SquadBag in its search.
-local old_ItemIsFound_eval = ItemIsFound.__eval
+local sbdr_old_ItemIsFound_eval = ItemIsFound.__eval
 function ItemIsFound:__eval(obj, context)
-	local result = old_ItemIsFound_eval(self, obj, context)
+	local result = sbdr_old_ItemIsFound_eval(self, obj, context)
 	if result then return true end
 
 	-- If not found on mercs or in containers, check the SquadBags in the sector
@@ -392,7 +392,7 @@ function ItemIsFound:__eval(obj, context)
 
 	local amount = self.Amount
 	local cur_amount = 0
-	
+
 	for _, squad in ipairs(squads) do
 		local bag = GetSquadBag(squad.UniqueId)
 		if bag then
@@ -408,9 +408,9 @@ function ItemIsFound:__eval(obj, context)
 end
 
 -- Patching ItemIsInMerc to include SquadBag in its check.
-local old_ItemIsInMerc_eval = ItemIsInMerc.__eval
+local sbdr_old_ItemIsInMerc_eval = ItemIsInMerc.__eval
 function ItemIsInMerc:__eval(obj, context)
-	local result = old_ItemIsInMerc_eval(self, obj, context)
+	local result = sbdr_old_ItemIsInMerc_eval(self, obj, context)
 	if result then return true end
 
 	-- Check player squad bags
@@ -482,10 +482,10 @@ function AddItemsToSquadBag(squad_id, items)
 end
 
 --- Hook into ScrapItem to ensure squad bag sync when an item is scrapped from the squad bag UI.
-old_ScrapItem = ScrapItem
+sbdr_old_ScrapItem = ScrapItem
 function ScrapItem(inventory, slot_name, item, amount, squadBag, squadId)
 	if not squadBag then
-		if old_ScrapItem then old_ScrapItem(inventory, slot_name, item, amount, squadBag, squadId) end
+		if sbdr_old_ScrapItem then sbdr_old_ScrapItem(inventory, slot_name, item, amount, squadBag, squadId) end
 		return
 	end
 
@@ -505,8 +505,8 @@ function ScrapItem(inventory, slot_name, item, amount, squadBag, squadId)
 		end
 	end
 
-	if old_ScrapItem then
-		old_ScrapItem(inventory, slot_name, item, amount, squadBag, squadId)
+	if sbdr_old_ScrapItem then
+		sbdr_old_ScrapItem(inventory, slot_name, item, amount, squadBag, squadId)
 	end
 end
 
@@ -550,6 +550,62 @@ function SquadBag:RemoveItem(slot_name, item, no_update)
 	return removedItem, pos
 end
 
+--- Overrides Combine2ItemsInternal to ensure a combination with both ingredients coming from the squad bag places the combined item into the operator's inventors.
+if not sbdr_old_Combine2ItemsInternal then
+    sbdr_old_Combine2ItemsInternal = Combine2ItemsInternal
+end
+
+function Combine2ItemsInternal(recipe_id, outcome, outcome_hp, skill_type, unit_operator_id, item1_context, item1_pos, item2_context, item2_pos, item2)
+    local is_bag1 = type(item1_context) == "number"
+    local is_bag2 = type(item2_context) == "number"
+
+    -- Special handling if BOTH ingredients are from a squad bag
+    if is_bag1 and is_bag2 then
+        local target_unit = GetContainerFromContainerNetId(unit_operator_id)
+
+        -- Temporarily override AddItemsToInventory to redirect failed bag additions to the operator
+        local sbdr_old_AddItemsToInventory = AddItemsToInventory
+        local added_item_name
+		local was_added = false
+
+        _G.AddItemsToInventory = function(inventoryObj, items, bLog)
+            local pos, reason = sbdr_old_AddItemsToInventory(inventoryObj, items, bLog)
+
+			if not pos and IsKindOf(inventoryObj, "SquadBag") and target_unit then
+				local combined_item = items[1]
+				added_item_name = combined_item and combined_item.DisplayName
+
+            	pos, reason = sbdr_old_AddItemsToInventory(target_unit, items, IsKindOf("UnitProperties", target_unit))
+
+				if pos then
+					was_added = true
+				end
+			end
+
+			return pos, reason
+		end
+
+        local status, err = procall(sbdr_old_Combine2ItemsInternal, recipe_id, outcome, outcome_hp, skill_type, unit_operator_id, item1_context, item1_pos, item2_context, item2_pos, item2)
+
+        -- Restore original function
+        _G.AddItemsToInventory = sbdr_old_AddItemsToInventory
+
+        -- Log placement if it ended up in the target unit's inventory
+        if status and was_added then
+            CombatLog("important", T(435437836774, "Items acquired:"))
+            local res = T{581384045758, " <amount> x <em><itemNameT></em> (<mercName>)", amount = 1, itemNameT = added_item_name, mercName = target_unit:GetDisplayName()}
+            CombatLog("importanthelper", res)
+        end
+
+        if not status then error(err) end
+
+        return
+    end
+
+    -- Default behavior for standard combinations
+    return sbdr_old_Combine2ItemsInternal(recipe_id, outcome, outcome_hp, skill_type, unit_operator_id, item1_context, item1_pos, item2_context, item2_pos, item2)
+end
+
 ---------------------------------------------------------------------------------------------------
 --- EVENT HANDLERS / INITIALIZATION
 ---------------------------------------------------------------------------------------------------
@@ -579,7 +635,7 @@ end
 --- @param xtemplate table The XTemplate object to patch.
 local function PatchInventoryContextMenu(xtemplate)
 	if not xtemplate then return end
-	
+
 	-- Robustly find the list container 'idPopupWindow'
 	local list = false
 	local function find_list(node)
@@ -623,14 +679,14 @@ local function PatchInventoryContextMenu(xtemplate)
 	-- Common condition for showing allocation options
 	local function AllocationCondition(parent, context, allocationType)
 		-- print("[SBDR] AllocationCondition: Start for " .. tostring(allocationType))
-		if not context then 
+		if not context then
 			-- print("[SBDR] AllocationCondition: No context")
-			return false 
+			return false
 		end
-		
+
 		local ctx = context.context
 		local slot_wnd = context.slot_wnd
-		
+
 		-- print("[SBDR] AllocationCondition: context.context type:", type(ctx), ctx and (IsKindOf(ctx, "Object") and ctx.class or "Not an object"))
 		if slot_wnd then
 			-- print("[SBDR] AllocationCondition: slot_wnd.slot_name:", slot_wnd.slot_name)
@@ -645,14 +701,14 @@ local function PatchInventoryContextMenu(xtemplate)
 		elseif slot_wnd and slot_wnd.slot_name == "SquadBag" then
 			is_squad_bag = true
 		end
-		
+
 		-- print("[SBDR] AllocationCondition: is_squad_bag=" .. tostring(is_squad_bag))
 
 		-- Check if there are other player squads in the sector
-		local unit_squad = context.unit and context.unit.Squad 
+		local unit_squad = context.unit and context.unit.Squad
 		local sector_id = unit_squad and gv_Squads[unit_squad] and gv_Squads[unit_squad].CurrentSector or gv_CurrentSectorId
-		
-		-- In Satellite view, gv_CurrentSectorId is usually correct, but if we are right-clicking a squad bag 
+
+		-- In Satellite view, gv_CurrentSectorId is usually correct, but if we are right-clicking a squad bag
 		-- from a squad that is NOT in the current sector, we need to handle that.
 		if gv_SatelliteView and not unit_squad then
 			-- If we are in satellite view and don't have a unit, try to get the sector from the squad bag context
@@ -671,28 +727,28 @@ local function PatchInventoryContextMenu(xtemplate)
 
 		-- print("[SBDR] AllocationCondition: sector_id:", tostring(sector_id))
 
-		if not sector_id then 
+		if not sector_id then
 			-- print("[SBDR] AllocationCondition: No sector_id")
-			return false 
+			return false
 		end
-		
+
 		local squads_count = 0
 		for _, squad in pairs(gv_Squads or {}) do
 			if squad.CurrentSector == sector_id and squad.Side == "player1" then
 				squads_count = squads_count + 1
 			end
 		end
-		
+
 		-- print("[SBDR] AllocationCondition: squads_count:", squads_count)
 
 		if not is_squad_bag then
 			-- print("[SBDR] AllocationCondition: Not a squad bag. ctx:", tostring(ctx and ctx.class), "slot_wnd:", tostring(slot_wnd and slot_wnd.class))
 			return false
 		end
-		
-		if squads_count <= 1 then 
+
+		if squads_count <= 1 then
 			-- print("[SBDR] AllocationCondition: Only one squad in sector " .. tostring(sector_id))
-			return false 
+			return false
 		end
 
 		-- Check item eligibility
@@ -705,9 +761,9 @@ local function PatchInventoryContextMenu(xtemplate)
 				-- print("[SBDR] isEligible ammo result:", tostring(res))
 				return res
 			elseif allocationType == "craftables" then
-				if table.find(SquadBagDoneRight.lists.craftingItems, class) then 
+				if table.find(SquadBagDoneRight.lists.craftingItems, class) then
 					-- print("[SBDR] isEligible craftables result: true (found in craftingItems list)")
-					return true 
+					return true
 				end
 				local res = IsKindOf(item, "Explosive") or IsKindOf(item, "Detonator")
 				-- print("[SBDR] isEligible craftables result:", tostring(res), "(IsKindOf Explosive/Detonator)")
@@ -718,18 +774,18 @@ local function PatchInventoryContextMenu(xtemplate)
 
 		-- Handle single selection (InventoryContextMenu)
 		if context.item then
-			if isEligible(context.item) then 
+			if isEligible(context.item) then
 				-- print("[SBDR] AllocationCondition: Single item eligible:", context.item.class)
-				return true 
+				return true
 			end
 		end
-		
+
 		-- Handle multi selection (InventoryContextMenuMulti)
 		if context.items then
 			for item, _ in pairs(context.items) do
-				if isEligible(item) then 
+				if isEligible(item) then
 					-- print("[SBDR] AllocationCondition: Multi item eligible:", item.class)
-					return true 
+					return true
 				end
 			end
 		end
@@ -750,9 +806,9 @@ local function PatchInventoryContextMenu(xtemplate)
 		'OnPress', function (self, gamepad)
 			local context = self:ResolveId("node").context
 			if not context then return end
-			local unit_squad = context.unit and context.unit.Squad 
+			local unit_squad = context.unit and context.unit.Squad
 			local sector_id = unit_squad and gv_Squads[unit_squad] and gv_Squads[unit_squad].CurrentSector or gv_CurrentSectorId
-			
+
 			-- Consistent with AllocationCondition logic for sector determination
 			if gv_SatelliteView and not unit_squad then
 				local ctx = context.context
@@ -765,7 +821,7 @@ local function PatchInventoryContextMenu(xtemplate)
 					if sq then sector_id = sq.CurrentSector end
 				end
 			end
-			
+
 			SquadBagDoneRight:AllocateAmmoInSector(sector_id)
 		end,
   		'Text', T(548200001001, "Allocate Ammo"),
@@ -784,9 +840,9 @@ local function PatchInventoryContextMenu(xtemplate)
 		'OnPress', function (self, gamepad)
 			local context = self:ResolveId("node").context
 			if not context then return end
-			local unit_squad = context.unit and context.unit.Squad 
+			local unit_squad = context.unit and context.unit.Squad
 			local sector_id = unit_squad and gv_Squads[unit_squad] and gv_Squads[unit_squad].CurrentSector or gv_CurrentSectorId
-			
+
 			-- Consistent with AllocationCondition logic for sector determination
 			if gv_SatelliteView and not unit_squad then
 				local ctx = context.context
@@ -799,14 +855,14 @@ local function PatchInventoryContextMenu(xtemplate)
 					if sq then sector_id = sq.CurrentSector end
 				end
 			end
-			
+
 			SquadBagDoneRight:AllocateCraftablesInSector(sector_id)
 		end,
   		'Text', T(548200001002, "Allocate Craftables"),
 	}))
-	
+
 	-- print("[SBDR] Injected allocation options into Context Menu: " .. tostring(xtemplate.id))
-	
+
 	-- Debug: verify the list actually has our items
 	for i, child in ipairs(list) do
 		if child.Id == "allocateAmmo" or child.Id == "allocateCraftables" then
@@ -831,9 +887,4 @@ function OnMsg.DataLoaded()
 	-- print("[SBDR] DataLoaded: Patching context menus...")
 	PatchInventoryContextMenu(XTemplates.InventoryContextMenu)
 	PatchInventoryContextMenu(XTemplates.InventoryContextMenuMulti)
-end
-
--- Force an update on first load if DataLoaded already passed
-if SquadBagDoneRight then
-	SquadBagDoneRight:UpdateProperties()
 end
