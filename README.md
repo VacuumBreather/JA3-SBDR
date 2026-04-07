@@ -9,6 +9,7 @@ This is an updated version of the original *Crafting items to Squad bag* mod and
 ## Key Features
 
 - **Immediate effect:** Unlike the old mod, changing the item categories in the mod options has immediate effect. No reloading of a save or restarting of the game necessary.
+- **Item combination:** Combining items when both ingredients come from the squad bag now places the resulting item in the inventory of the merc who performed the combination (the game picks the merc with the best skill in the sector).
 - **Scrapping and cashing in:** Cashing in or scrapping item stacks in the squad bag now works for the new items.
 - **Non-stackable items:** Non-stackable items like the big valuables (Figurine, Golden Dog, etc.) will no longer vanish when moving them to the squad bag.
 - **Automatic Item Movement:** Automatically moves crafting materials, skill books, and valuables to the squad bag upon game start/load or when mod options are changed. *(Can be toggled in options.)*
