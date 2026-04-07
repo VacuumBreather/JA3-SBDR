@@ -1,0 +1,11 @@
+id,text
+548200001001,ALLOCATE AMMO
+548200001002,ALLOCATE CRAFTABLES
+548200001003,Allows moving crafting items to the squad bag
+548200001004,Allows moving skill magazines to the squad bag
+548200001005,Allows moving valuables (and money bags) to the squad bag
+548200001006,Enable to move items from merc inventories to the squad bag automatically. Note: this will only be triggered on game start/load or when the mod options are changed.
+548200001007,Crafting items to squad bag
+548200001008,Skill mags to squad bag
+548200001009,Valuables to squad bag
+548200001010,Automatically move items to bag
