@@ -12,7 +12,7 @@ This is an updated version of the original *Crafting items to Squad bag* mod and
 - **Scrapping and cashing in:** Cashing in or scrapping item stacks in the squad bag now works for the new items.
 - **Non-stackable items:** Non-stackable items like the big valuables (Figurine, Golden Dog, etc.) will no longer vanish when moving them to the squad bag.
 - **Automatic Item Movement:** Automatically moves crafting materials, skill books, and valuables to the squad bag upon game start/load or when mod options are changed. *(Can be toggled in options.)*
-- **Context Menu Allocation:** Right-click on Ammo or Craftables in any squad bag to redistribute them across all player squads in the current sector using proportional allocation based on the total magazine size of weapons equipped by each squad. Supports standard ammo, 40mm, mortar shells, flares, and HE rockets (Ordnance).
+- **Context Menu Allocation:** Right-click on Ammo or Craftables in any squad bag to redistribute them across all player squads in the current sector using proportional allocation based on the total magazine size of weapons in each squad. Supports standard ammo, 40mm, mortar shells, flares, and HE rockets (Ordnance).
 - **Skill-Based Crafting Allocation:** Redistributes explosives and detonators based on the highest Explosive skill in each squad, and other craftables (like steel pipes) based on the highest Mechanical skill.
 - **Minimum Skill Threshold:** Allocation only considers mercs with a relevant skill of 60 or higher to ensure items go to the most capable hands.
 - **Improved Sorting:** New items are sorted properly — gun powder ends up next to parts and meds, then comes ammo, heavy ammo, craftables (first explosives, then mechanics items), and finally valuables.
