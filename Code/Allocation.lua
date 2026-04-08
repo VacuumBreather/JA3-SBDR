@@ -227,7 +227,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
         end
 
         if next(total_items) == nil then 
-            -- print("[SBDR] AllocateCraftablesInSector: No items found for skill " .. (type(skill_name) == "table" and table.concat(skill_name, "/") or skill_name))
+            -- print("[SBDR] AllocateCraftablesInSector: No items found for skill " .. table.concat(skill_name, "/"))
             return 
         end
 
@@ -236,48 +236,37 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
         local total_skill = 0
         for _, squad in ipairs(squads) do
             local squad_effective_skill = 0
-            if type(skill_name) == "table" then
-                if sum_skills then
-                    -- Sum the highest of each skill
-                    for _, s in ipairs(skill_name) do
-                        local max_s = 0
-                        for _, unit_id in ipairs(squad.units or {}) do
-                            local unit = gv_UnitData[unit_id]
-                            local val = unit and unit[s] or 0
-                            if val >= 60 then
-                                max_s = Max(max_s, val)
-                            end
-                        end
-                        squad_effective_skill = squad_effective_skill + max_s
-                    end
-                else
-                    -- Max of all skills
+            if sum_skills then
+                -- Sum the highest of each skill
+                for _, s in ipairs(skill_name) do
+                    local max_s = 0
                     for _, unit_id in ipairs(squad.units or {}) do
                         local unit = gv_UnitData[unit_id]
-                        if unit then
-                            for _, s in ipairs(skill_name) do
-                                local val = unit[s] or 0
-                                if val >= 60 then
-                                    squad_effective_skill = Max(squad_effective_skill, val)
-                                end
-                            end
+                        local val = unit and unit[s] or 0
+                        if val >= 60 then
+                            max_s = Max(max_s, val)
                         end
                     end
+                    squad_effective_skill = squad_effective_skill + max_s
                 end
             else
-                -- Single skill
+                -- Max of all skills
                 for _, unit_id in ipairs(squad.units or {}) do
                     local unit = gv_UnitData[unit_id]
-                    local val = unit and unit[skill_name] or 0
-                    if val >= 60 then
-                        squad_effective_skill = Max(squad_effective_skill, val)
+                    if unit then
+                        for _, s in ipairs(skill_name) do
+                            local val = unit[s] or 0
+                            if val >= 60 then
+                                squad_effective_skill = Max(squad_effective_skill, val)
+                            end
+                        end
                     end
                 end
             end
             
             squad_skills[squad.UniqueId] = squad_effective_skill
             total_skill = total_skill + squad_effective_skill
-            -- print(string.format("[SBDR] AllocateCraftablesInSector: Squad %s effective max %s skill: %d", tostring(squad.UniqueId), (type(skill_name) == "table" and table.concat(skill_name, "/") or skill_name), squad_effective_skill))
+            -- print(string.format("[SBDR] AllocateCraftablesInSector: Squad %s effective max %s skill: %d", tostring(squad.UniqueId), table.concat(skill_name, "/"), squad_effective_skill))
         end
 
         -- Distribute
@@ -332,9 +321,9 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
         end
     end
 
-    distribute_group(explosives_items, "Explosives")
-    distribute_group(mechanical_items, "Mechanical")
-    distribute_group(armor_upgrades, "Mechanical")
+    distribute_group(explosives_items, { "Explosives" })
+    distribute_group(mechanical_items, { "Mechanical" })
+    distribute_group(armor_upgrades, { "Mechanical" })
     distribute_group(parts_items, { "Mechanical", "Explosives" }, true)
 
     -- Re-sort all bags. UI is refreshed in _SortItemsInBag.
