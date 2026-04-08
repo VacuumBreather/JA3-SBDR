@@ -608,6 +608,21 @@ end
 --- EVENT HANDLERS / INITIALIZATION
 ---------------------------------------------------------------------------------------------------
 
+function OnMsg.UnitJoinedPlayerSquad(squad_id, unit_id)
+	local squad = gv_Squads[squad_id]
+
+	if squad and squad.CurrentSector then
+		SquadBagDoneRight:AllocateAllInSector(squad.CurrentSector)
+	end
+end
+
+-- Overriding the global OnChangeUnitSquad to use our new allocation logic.
+-- The original function is buggy and doesn't handle split squads as well as our sector-wide re-balancing.
+function OnChangeUnitSquad(unit, prevSquad, newSquad)
+    -- We rely on UnitJoinedPlayerSquad to trigger a full sector-wide re-allocation
+    -- which is more robust than trying to calculate a partial share during the move.
+end
+
 --- Initializes attack state for a brand new campaign.
 function OnMsg.InitSessionCampaignObjects()
 	SquadBagDoneRight:UpdateProperties()
