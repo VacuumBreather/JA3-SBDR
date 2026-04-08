@@ -677,6 +677,11 @@ local function PatchInventoryContextMenu(xtemplate)
 		table.remove(list, existing2)
 		existing2 = table.find(list, "Id", "allocateCraftables")
 	end
+	local existing3 = table.find(list, "Id", "allocateAll")
+	while existing3 do
+		table.remove(list, existing3)
+		existing3 = table.find(list, "Id", "allocateAll")
+	end
 
 	-- Find the index of "scrap" or similar to insert before it
 	local insert_idx = #list + 1
