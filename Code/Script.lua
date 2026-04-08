@@ -682,6 +682,11 @@ local function PatchInventoryContextMenu(xtemplate)
 		table.remove(list, existing3)
 		existing3 = table.find(list, "Id", "allocateAll")
 	end
+	local existing4 = table.find(list, "Id", "allocateMeds")
+	while existing4 do
+		table.remove(list, existing4)
+		existing4 = table.find(list, "Id", "allocateMeds")
+	end
 
 	-- Find the index of "scrap" or similar to insert before it
 	local insert_idx = #list + 1
@@ -784,6 +789,10 @@ local function PatchInventoryContextMenu(xtemplate)
 				local res = IsKindOf(item, "Explosive") or IsKindOf(item, "Detonator")
 				-- print("[SBDR] isEligible craftables result:", tostring(res), "(IsKindOf Explosive/Detonator)")
 				return res
+			elseif allocationType == "meds" then
+				local res = class == "Meds" or class == "Medkit" or class == "FirstAidKit" or class == "Reanimationsset"
+				-- print("[SBDR] isEligible meds result:", tostring(res))
+				return res
 			elseif allocationType == "all" then
 				return true
 			end
@@ -880,6 +889,40 @@ local function PatchInventoryContextMenu(xtemplate)
 	}))
 	insert_idx = insert_idx + 1
 
+	-- Add ALLOCATE MEDS
+	table.insert(list, insert_idx, PlaceObj('XTemplateTemplate', {
+		'comment', "allocate meds",
+		'__condition', function (parent, context) return AllocationCondition(parent, context, "meds") end,
+		'__template', "ContextMenuButton",
+		'Id', "allocateMeds",
+		'OnContextUpdate', function(self, context)
+			-- print("[SBDR] on allocateMeds update. Visible:", self.Visible, "Enabled:", self.enabled)
+		end,
+		'OnPress', function (self, gamepad)
+			local context = self:ResolveId("node").context
+			if not context then return end
+			local unit_squad = context.unit and context.unit.Squad
+			local sector_id = unit_squad and gv_Squads[unit_squad] and gv_Squads[unit_squad].CurrentSector or gv_CurrentSectorId
+
+			-- Consistent with AllocationCondition logic for sector determination
+			if gv_SatelliteView and not unit_squad then
+				local ctx = context.context
+				local slot_wnd = context.slot_wnd
+				if ctx and ctx.squad_id then
+					local sq = gv_Squads[ctx.squad_id]
+					if sq then sector_id = sq.CurrentSector end
+				elseif slot_wnd and slot_wnd.context and slot_wnd.context.squad_id then
+					local sq = gv_Squads[slot_wnd.context.squad_id]
+					if sq then sector_id = sq.CurrentSector end
+				end
+			end
+
+			SquadBagDoneRight:AllocateMedsInSector(sector_id)
+		end,
+  		'Text', T(548200001012, "Allocate Meds"),
+	}))
+	insert_idx = insert_idx + 1
+
 	-- Add ALLOCATE ALL
 	table.insert(list, insert_idx, PlaceObj('XTemplateTemplate', {
 		'comment', "allocate all",
@@ -910,14 +953,14 @@ local function PatchInventoryContextMenu(xtemplate)
 
 			SquadBagDoneRight:AllocateAllInSector(sector_id)
 		end,
-  		'Text', T(548200001011, "ALLOCATE ALL"),
+  		'Text', T(548200001011, "Allocate All"),
 	}))
 
 	-- print("[SBDR] Injected allocation options into Context Menu: " .. tostring(xtemplate.id))
 
 	-- Debug: verify the list actually has our items
 	for i, child in ipairs(list) do
-		if child.Id == "allocateAmmo" or child.Id == "allocateCraftables" or child.Id == "allocateAll" then
+		if child.Id == "allocateAmmo" or child.Id == "allocateCraftables" or child.Id == "allocateMeds" or child.Id == "allocateAll" then
 			-- print("[SBDR] Verified child in list at index " .. i .. ": " .. tostring(child.Id))
 		end
 	end
