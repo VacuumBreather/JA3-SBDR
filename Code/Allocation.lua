@@ -131,12 +131,30 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
                     end
                 end
             else
-                -- No squad uses this caliber, distribute evenly
-                local share_per_squad = remaining_amount / #squads
-                -- print(string.format("[SBDR] AllocateAmmoInSector: No direct need for %s, distributing evenly", class_id))
+                -- No squad uses this caliber, distribute by squad member count
+                local total_units = 0
+                for _, squad in ipairs(squads) do
+                    total_units = total_units + #(squad.units or {})
+                end
+                
+                -- print(string.format("[SBDR] AllocateAmmoInSector: No direct need for %s, distributing by squad member count (total units: %d)", class_id, total_units))
                 for i, squad in ipairs(squads) do
                     local squad_id = squad.UniqueId
-                    local share = (i == #squads) and remaining_amount or share_per_squad
+                    local num_units = #(squad.units or {})
+                    local share = 0
+                    
+                    if total_units > 0 then
+                        if i == #squads then
+                            share = remaining_amount
+                        else
+                            share = MulDivRound(data.total_amount, num_units, total_units)
+                            share = Min(share, remaining_amount)
+                        end
+                    else
+                        -- Fallback for empty squads (shouldn't happen in player1 squads usually)
+                        share = (i == #squads) and remaining_amount or (data.total_amount / #squads)
+                    end
+                    
                     if share > 0 then
                         local new_item = PlaceInventoryItem(class_id)
                         if IsKindOf(new_item, "InventoryStack") then
@@ -145,7 +163,7 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
                         squad.squad_bag = squad.squad_bag or {}
                         table.insert(squad.squad_bag, new_item)
                         remaining_amount = remaining_amount - share
-                        -- print(string.format("[SBDR] AllocateAmmoInSector:   -> Squad %s gets %d of %s (even share)", tostring(squad_id), share, class_id))
+                        -- print(string.format("[SBDR] AllocateAmmoInSector:   -> Squad %s gets %d of %s (weighted share, %d units)", tostring(squad_id), share, class_id, num_units))
                     end
                 end
             end
@@ -247,8 +265,24 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
                         share = Min(share, remaining)
                     end
                 else
-                    -- No skill at all (all squads either have no mercs or all below 60), distribute evenly
-                    share = (i == #squads) and remaining or (total_amount / #squads)
+                    -- No skill at all (all squads either have no mercs or all below 60), distribute by squad member count
+                    local total_units = 0
+                    for _, s in ipairs(squads) do
+                        total_units = total_units + #(s.units or {})
+                    end
+                    
+                    local num_units = #(squad.units or {})
+                    if total_units > 0 then
+                        if i == #squads then
+                            share = remaining
+                        else
+                            share = MulDivRound(total_amount, num_units, total_units)
+                            share = Min(share, remaining)
+                        end
+                    else
+                        -- Fallback for empty squads
+                        share = (i == #squads) and remaining or (total_amount / #squads)
+                    end
                 end
 
                 if share > 0 then
@@ -344,8 +378,24 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
                     share = Min(share, remaining)
                 end
             else
-                -- No one has a medkit, distribute evenly
-                share = (i == #squads) and remaining or (total_meds / #squads)
+                -- No one has a medkit, distribute by squad member count
+                local total_units = 0
+                for _, s in ipairs(squads) do
+                    total_units = total_units + #(s.units or {})
+                end
+                
+                local num_units = #(squad.units or {})
+                if total_units > 0 then
+                    if i == #squads then
+                        share = remaining
+                    else
+                        share = MulDivRound(total_meds, num_units, total_units)
+                        share = Min(share, remaining)
+                    end
+                else
+                    -- Fallback for empty squads
+                    share = (i == #squads) and remaining or (total_meds / #squads)
+                end
             end
 
             if share > 0 then
