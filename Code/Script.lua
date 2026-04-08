@@ -1,23 +1,23 @@
 ﻿--- @module SquadBagDoneRight
 --- @desc This mod handles moving specific crafting, skill, and valuable items to the squad bag automatically.
 
-SquadBagDoneRight = SquadBagDoneRight or {
-	lists = {
-		craftingItems = {
-			"BlackPowder", "C4", "Combination_BalancingWeight", "Combination_CeramicPlates",
-			"Combination_Detonator_Proximity", "Combination_Detonator_Remote", "Combination_Detonator_Time",
-			"Combination_Kompositum58", "Combination_Sharpener", "Combination_WeavePadding",
-			"FineSteelPipe", "Microchip", "OpticalLens", "PETN", "TNT"
-		},
-		skillMagazines = {
-			"SkillMag_Agility", "SkillMag_Dexterity", "SkillMag_Explosives", "SkillMag_Health",
-			"SkillMag_Leadership", "SkillMag_Marksmanship", "SkillMag_Mechanical", "SkillMag_Medical",
-			"SkillMag_Strength", "SkillMag_Wisdom"
-		},
-		valuables = {
-			"BigDiamond", "ChippedSapphire", "GoldBar", "MoneyBag", "TinyDiamonds",
-			"TreasureFigurine", "TreasureGoldenDog", "TreasureIdol", "TreasureMask", "TreasureTablet"
-		}
+SquadBagDoneRight = SquadBagDoneRight or {}
+
+SquadBagDoneRight.lists = {
+	craftingItems = {
+		"BlackPowder", "C4", "Combination_BalancingWeight", "Combination_CeramicPlates",
+		"Combination_Detonator_Proximity", "Combination_Detonator_Remote", "Combination_Detonator_Time",
+		"Combination_Kompositum58", "Combination_Sharpener", "Combination_WeavePadding",
+		"FineSteelPipe", "Microchip", "OpticalLens", "PETN", "TNT"
+	},
+	skillMagazines = {
+		"SkillMag_Agility", "SkillMag_Dexterity", "SkillMag_Explosives", "SkillMag_Health",
+		"SkillMag_Leadership", "SkillMag_Marksmanship", "SkillMag_Mechanical", "SkillMag_Medical",
+		"SkillMag_Strength", "SkillMag_Wisdom"
+	},
+	valuables = {
+		"BigDiamond", "ChippedSapphire", "GoldBar", "MoneyBag", "TinyDiamonds",
+		"TreasureFigurine", "TreasureGoldenDog", "TreasureIdol", "TreasureMask", "TreasureTablet"
 	}
 }
 
@@ -482,7 +482,7 @@ function AddItemsToSquadBag(squad_id, items)
 end
 
 --- Hook into ScrapItem to ensure squad bag sync when an item is scrapped from the squad bag UI.
-sbdr_old_ScrapItem = ScrapItem
+local sbdr_old_ScrapItem = ScrapItem
 function ScrapItem(inventory, slot_name, item, amount, squadBag, squadId)
 	if not squadBag then
 		if sbdr_old_ScrapItem then sbdr_old_ScrapItem(inventory, slot_name, item, amount, squadBag, squadId) end
@@ -551,9 +551,7 @@ function SquadBag:RemoveItem(slot_name, item, no_update)
 end
 
 --- Overrides Combine2ItemsInternal to ensure a combination with both ingredients coming from the squad bag places the combined item into the operator's inventors.
-if not sbdr_old_Combine2ItemsInternal then
-    sbdr_old_Combine2ItemsInternal = Combine2ItemsInternal
-end
+local sbdr_old_Combine2ItemsInternal = Combine2ItemsInternal
 
 function Combine2ItemsInternal(recipe_id, outcome, outcome_hp, skill_type, unit_operator_id, item1_context, item1_pos, item2_context, item2_pos, item2)
     local is_bag1 = type(item1_context) == "number"
