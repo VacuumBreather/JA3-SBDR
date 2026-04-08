@@ -550,7 +550,6 @@ function SquadBag:RemoveItem(slot_name, item, no_update)
 	return removedItem, pos
 end
 
---- Overrides Combine2ItemsInternal to ensure a combination with both ingredients coming from the squad bag places the combined item into the operator's inventors.
 local sbdr_old_Combine2ItemsInternal = Combine2ItemsInternal
 
 function Combine2ItemsInternal(recipe_id, outcome, outcome_hp, skill_type, unit_operator_id, item1_context, item1_pos, item2_context, item2_pos, item2)
@@ -610,7 +609,6 @@ end
 
 function OnMsg.UnitJoinedPlayerSquad(squad_id, unit_id)
 	local squad = gv_Squads[squad_id]
-
 	if squad and squad.CurrentSector then
 		SquadBagDoneRight:AllocateAllInSector(squad.CurrentSector)
 	end
@@ -774,13 +772,15 @@ local function PatchInventoryContextMenu(xtemplate)
 				-- print("[SBDR] isEligible ammo result:", tostring(res))
 				return res
 			elseif allocationType == "craftables" then
-				if table.find(SquadBagDoneRight.lists.craftingItems, class) then
-					-- print("[SBDR] isEligible craftables result: true (found in craftingItems list)")
+				if class == "Parts" or table.find(SquadBagDoneRight.lists.craftingItems, class) then
+					-- print("[SBDR] isEligible craftables result: true (found in craftingItems list or Parts)")
 					return true
 				end
 				local res = IsKindOf(item, "Explosive") or IsKindOf(item, "Detonator")
 				-- print("[SBDR] isEligible craftables result:", tostring(res), "(IsKindOf Explosive/Detonator)")
 				return res
+			elseif allocationType == "all" then
+				return true
 			end
 			return false
 		end
@@ -873,12 +873,46 @@ local function PatchInventoryContextMenu(xtemplate)
 		end,
   		'Text', T(548200001002, "Allocate Craftables"),
 	}))
+	insert_idx = insert_idx + 1
+
+	-- Add ALLOCATE ALL
+	table.insert(list, insert_idx, PlaceObj('XTemplateTemplate', {
+		'comment', "allocate all",
+		'__condition', function (parent, context) return AllocationCondition(parent, context, "all") end,
+		'__template', "ContextMenuButton",
+		'Id', "allocateAll",
+		'OnContextUpdate', function(self, context)
+			-- print("[SBDR] on allocateAll update. Visible:", self.Visible, "Enabled:", self.enabled)
+		end,
+		'OnPress', function (self, gamepad)
+			local context = self:ResolveId("node").context
+			if not context then return end
+			local unit_squad = context.unit and context.unit.Squad
+			local sector_id = unit_squad and gv_Squads[unit_squad] and gv_Squads[unit_squad].CurrentSector or gv_CurrentSectorId
+
+			-- Consistent with AllocationCondition logic for sector determination
+			if gv_SatelliteView and not unit_squad then
+				local ctx = context.context
+				local slot_wnd = context.slot_wnd
+				if ctx and ctx.squad_id then
+					local sq = gv_Squads[ctx.squad_id]
+					if sq then sector_id = sq.CurrentSector end
+				elseif slot_wnd and slot_wnd.context and slot_wnd.context.squad_id then
+					local sq = gv_Squads[slot_wnd.context.squad_id]
+					if sq then sector_id = sq.CurrentSector end
+				end
+			end
+
+			SquadBagDoneRight:AllocateAllInSector(sector_id)
+		end,
+  		'Text', T(548200001011, "ALLOCATE ALL"),
+	}))
 
 	-- print("[SBDR] Injected allocation options into Context Menu: " .. tostring(xtemplate.id))
 
 	-- Debug: verify the list actually has our items
 	for i, child in ipairs(list) do
-		if child.Id == "allocateAmmo" or child.Id == "allocateCraftables" then
+		if child.Id == "allocateAmmo" or child.Id == "allocateCraftables" or child.Id == "allocateAll" then
 			-- print("[SBDR] Verified child in list at index " .. i .. ": " .. tostring(child.Id))
 		end
 	end
