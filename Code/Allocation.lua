@@ -197,11 +197,12 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
     -- print("[SBDR] AllocateCraftablesInSector: Starting for sector " .. tostring(sector_id))
 
     -- Define item groups
-    local explosives_items = { "C4", "PETN", "TNT", "Combination_Detonator_Proximity", "Combination_Detonator_Remote", "Combination_Detonator_Time" }
-    local mechanical_items = { "FineSteelPipe", "OpticalLens", "Microchip", "Combination_BalancingWeight", "Combination_Sharpener", "Parts" }
+    local explosives_items = { "C4", "PETN", "TNT", "Combination_Detonator_Proximity", "Combination_Detonator_Remote", "Combination_Detonator_Time", "BlackPowder" }
+    local mechanical_items = { "FineSteelPipe", "OpticalLens", "Microchip", "Combination_BalancingWeight", "Combination_Sharpener" }
     local armor_upgrades = { "Combination_CeramicPlates", "Combination_WeavePadding", "Combination_Kompositum58" }
+    local parts_items = { "Parts" }
 
-    local function distribute_group(item_list, skill_name)
+    local function distribute_group(item_list, skill_name, sum_skills)
         local total_items = {} -- { [class] = total_amount }
         local items_to_destroy = {}
 
@@ -226,7 +227,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
         end
 
         if next(total_items) == nil then 
-            -- print("[SBDR] AllocateCraftablesInSector: No items found for skill " .. skill_name)
+            -- print("[SBDR] AllocateCraftablesInSector: No items found for skill " .. (type(skill_name) == "table" and table.concat(skill_name, "/") or skill_name))
             return 
         end
 
@@ -234,21 +235,49 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
         local squad_skills = {}
         local total_skill = 0
         for _, squad in ipairs(squads) do
-            local max_skill = 0
-            for _, unit_id in ipairs(squad.units or {}) do
-                local unit = gv_UnitData[unit_id]
-                if unit then
-                    local skill_val = unit[skill_name] or 0
-                    if skill_val >= 60 then
-                        max_skill = Max(max_skill, skill_val)
-                    else
-                        -- print(string.format("[SBDR] AllocateCraftablesInSector: Ignoring merc %s in squad %s (skill %d < 60)", tostring(unit_id), tostring(squad.UniqueId), skill_val))
+            local squad_effective_skill = 0
+            if type(skill_name) == "table" then
+                if sum_skills then
+                    -- Sum the highest of each skill
+                    for _, s in ipairs(skill_name) do
+                        local max_s = 0
+                        for _, unit_id in ipairs(squad.units or {}) do
+                            local unit = gv_UnitData[unit_id]
+                            local val = unit and unit[s] or 0
+                            if val >= 60 then
+                                max_s = Max(max_s, val)
+                            end
+                        end
+                        squad_effective_skill = squad_effective_skill + max_s
+                    end
+                else
+                    -- Max of all skills
+                    for _, unit_id in ipairs(squad.units or {}) do
+                        local unit = gv_UnitData[unit_id]
+                        if unit then
+                            for _, s in ipairs(skill_name) do
+                                local val = unit[s] or 0
+                                if val >= 60 then
+                                    squad_effective_skill = Max(squad_effective_skill, val)
+                                end
+                            end
+                        end
+                    end
+                end
+            else
+                -- Single skill
+                for _, unit_id in ipairs(squad.units or {}) do
+                    local unit = gv_UnitData[unit_id]
+                    local val = unit and unit[skill_name] or 0
+                    if val >= 60 then
+                        squad_effective_skill = Max(squad_effective_skill, val)
                     end
                 end
             end
-            squad_skills[squad.UniqueId] = max_skill
-            total_skill = total_skill + max_skill
-            -- print(string.format("[SBDR] AllocateCraftablesInSector: Squad %s effective max %s skill: %d", tostring(squad.UniqueId), skill_name, max_skill))
+            
+            squad_skills[squad.UniqueId] = squad_effective_skill
+            total_skill = total_skill + squad_effective_skill
+            -- print(string.format("[SBDR] AllocateCraftablesInSector: Squad %s effective max %s skill: %d", tostring(squad.UniqueId), (type(skill_name) == "table" and table.concat(skill_name, "/") or skill_name), squad_effective_skill))
         end
 
         -- Distribute
@@ -306,6 +335,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
     distribute_group(explosives_items, "Explosives")
     distribute_group(mechanical_items, "Mechanical")
     distribute_group(armor_upgrades, "Mechanical")
+    distribute_group(parts_items, { "Mechanical", "Explosives" }, true)
 
     -- Re-sort all bags. UI is refreshed in _SortItemsInBag.
     for _, squad in ipairs(squads) do
