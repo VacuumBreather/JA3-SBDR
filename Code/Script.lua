@@ -344,54 +344,89 @@ function SquadBagDoneRight:EvictInvalidItems()
 		local bag = squad.squad_bag
 
 		if bag and #bag > 0 then
-			for i = #bag, 1, -1 do
-				local item = bag[i]
+			-- 1. Simulation on a copy
+			local bag_copy = table.copy(bag)
+			local items_to_evict = {}
 
+			for i = #bag_copy, 1, -1 do
+				local item = bag_copy[i]
 				if item and not IsKindOf(item, SquadBagItemClass) then
-					table.remove(bag, i)
-					local moved = false
+					table.remove(bag_copy, i)
+					table.insert(items_to_evict, item)
+				end
+			end
 
-					if squad.units then
-						for _, merc_id in ipairs(squad.units) do
-							local unit = gv_UnitData and gv_UnitData[merc_id]
+			if #items_to_evict > 0 then
+				-- 2. Checksum Before
+				local checksum_before = {}
+				for _, item in ipairs(bag) do
+					local amt = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
+					checksum_before[item.class] = (checksum_before[item.class] or 0) + amt
+				end
 
-							if not unit then
-								goto continue
-							end
+				-- 3. Checksum After (Simulation)
+				local checksum_after = {}
+				for _, item in ipairs(bag_copy) do
+					local amt = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
+					checksum_after[item.class] = (checksum_after[item.class] or 0) + amt
+				end
+				for _, item in ipairs(items_to_evict) do
+					local amt = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
+					checksum_after[item.class] = (checksum_after[item.class] or 0) + amt
+				end
 
-							local canAdd, reason = unit:CanAddItem("Inventory", item)
+				local verified = true
+				for class, count_before in pairs(checksum_before) do
+					if count_before ~= (checksum_after[class] or 0) then
+						verified = false
+						print(string.format("[SBDR] [Error] EvictInvalidItems: Verification failed for %s", class))
+						break
+					end
+				end
 
-							if canAdd then
-								local added = unit:AddItem("Inventory", item)
+				if verified then
+					-- 4. Application
+					squad.squad_bag = bag_copy
 
-								if added then
-									moved = true
-									break
-								else
-									print(string.format("[SBDR] [Warning] Moving item %s to merc %s failed", tostring(item.class), tostring(merc_id)))
+					-- 5. Move evicted items to mercs or sector
+					for _, item in ipairs(items_to_evict) do
+						local moved = false
+
+						if squad.units then
+							for _, merc_id in ipairs(squad.units) do
+								local unit = gv_UnitData and gv_UnitData[merc_id]
+								if unit then
+									local canAdd = unit:CanAddItem("Inventory", item)
+									if canAdd then
+										local added = unit:AddItem("Inventory", item)
+										if added then
+											moved = true
+											break
+										end
+									end
 								end
 							end
-
-							::continue::
 						end
-					end
 
-					if not moved then
-						local sector_id = squad.CurrentSector
-
-						if sector_id then
-							local sector_inv = GetSectorInventory(sector_id)
-
-							if sector_inv then
-								AddItemsToInventory(sector_inv, { item })
-								moved = true
+						if not moved then
+							local sector_id = squad.CurrentSector
+							if sector_id then
+								local sector_inv = GetSectorInventory(sector_id)
+								if sector_inv then
+									AddItemsToInventory(sector_inv, { item })
+									moved = true
+								end
 							end
 						end
-					end
 
-					if not moved then
-						print(string.format("[SBDR] [Warning] Unable to evict item %s from squad %s - item may be lost!", tostring(item.class), tostring(squad_id)))
+						if not moved then
+							-- Fallback: put it back in the bag if somehow everything failed (unlikely due to sector stash)
+							table.insert(squad.squad_bag, item)
+							print(string.format("[SBDR] [Warning] Unable to evict item %s - returning to squad bag.", tostring(item.class)))
+						end
 					end
+				else
+					print("[SBDR] [Error] EvictInvalidItems: Verification failed. Eviction aborted for squad " .. tostring(squad_id))
 				end
 			end
 		end
@@ -403,7 +438,6 @@ function SquadBagDoneRight:EvictInvalidItems()
 
 	if gv_SquadBag then
 		local current_squad = gv_SquadBag.squad_id
-
 		if current_squad and gv_Squads[current_squad] then
 			_SortItemsInBag(current_squad)
 		end
@@ -458,88 +492,144 @@ function _SortItemsInBag(squad_id)
 		return
 	end
 
-	local bag_items = GetSquadBag(squad_id)
-	if not bag_items then
+	local bag = gv_Squads[squad_id].squad_bag
+	if not bag or #bag == 0 then
 		return
 	end
 
+	-- 1. Checksum: Calculate total quantity of each item class before sorting
+	local checksum_before = {}
+	local items_to_destroy = {} -- Collect original items here to destroy after verification
+	for _, item in ipairs(bag) do
+		if item then
+			local amount = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
+			checksum_before[item.class] = (checksum_before[item.class] or 0) + amount
+			table.insert(items_to_destroy, item)
+		end
+	end
+
+	-- 2. Transactional Stacking & Sorting on a copy
 	local stacks = {}
 	local non_stackables = {}
 
-	for idx, item in ipairs(bag_items) do
-		if item and not IsKindOf(item, InventoryStackClass) then
-			non_stackables[#non_stackables + 1] = item
-		elseif item then
-			for i = 1, #stacks do
-				local bag_item = stacks[i]
+	for _, original_item in ipairs(bag) do
+		if original_item then
+			local amount = (IsKindOf(original_item, InventoryStackClass) and original_item.Amount) or 1
+			local class = original_item.class
 
-				if bag_item.class == item.class then
-					local to_add = Min(bag_item.MaxStacks - bag_item.Amount, item.Amount)
-
-					if to_add > 0 then
-						bag_item.Amount = bag_item.Amount + to_add
-						item.Amount = item.Amount - to_add
-
-						if item.Amount == 0 then
-							DoneObject(item)
-							item = false
-							break
-						end
+			if not IsKindOf(original_item, InventoryStackClass) then
+				-- Non-stackable: create a new object in the copy
+				local new_item = PlaceInventoryItem(class)
+				if new_item then
+					non_stackables[#non_stackables + 1] = new_item
+				else
+					print(string.format("[SBDR] [Error] _SortItemsInBag: Failed to recreate non-stackable %s", class))
+				end
+			else
+				-- Stackable item: simulate stacking in the copy
+				local remaining = amount
+				-- Try to merge into existing stacks in the copy
+				for _, stack in ipairs(stacks) do
+					if stack.class == class and stack.Amount < stack.MaxStacks then
+						local to_add = Min(stack.MaxStacks - stack.Amount, remaining)
+						stack.Amount = stack.Amount + to_add
+						remaining = remaining - to_add
+						if remaining <= 0 then break end
 					end
 				end
-			end
 
-			if item and item.Amount and item.Amount > 0 then
-				stacks[#stacks + 1] = item
+				-- If anything remains, create new stacks
+				while remaining > 0 do
+					local new_stack = PlaceInventoryItem(class)
+					if new_stack then
+						local to_add = Min(new_stack.MaxStacks, remaining)
+						new_stack.Amount = to_add
+						stacks[#stacks + 1] = new_stack
+						remaining = remaining - to_add
+					else
+						print(string.format("[SBDR] [Error] _SortItemsInBag: Failed to recreate stackable %s", class))
+						remaining = 0 -- Stop to avoid infinite loop
+					end
+				end
 			end
 		end
 	end
 
 	local all_items = ConcatTables(stacks, non_stackables)
 
-	table.sort(all_items, function(a, b)
-		local priority_a = GetSortPriority(a)
-		local priority_b = GetSortPriority(b)
+	-- 3. Checksum: Verify total quantity of each item class after sorting
+	local checksum_after = {}
+	for _, item in ipairs(all_items) do
+		local amount = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
+		checksum_after[item.class] = (checksum_after[item.class] or 0) + amount
+	end
 
-		if priority_a ~= priority_b then
-			return priority_a < priority_b
+	local verified = true
+	for class, count_before in pairs(checksum_before) do
+		if count_before ~= (checksum_after[class] or 0) then
+			verified = false
+			print(string.format("[SBDR] [Error] _SortItemsInBag: Verification failed for %s (before: %d, after: %d)", class, count_before, checksum_after[class] or 0))
+			break
 		end
+	end
 
-		-- Within the same priority group, secondary sorting
-		if priority_a == 4 then -- Ammo
-			local caliber_a = a.Caliber
-			local caliber_b = b.Caliber
+	if verified then
+		-- 4. Application
+		table.sort(all_items, function(a, b)
+			local priority_a = GetSortPriority(a)
+			local priority_b = GetSortPriority(b)
 
-			if caliber_a == caliber_b then
-				if a.Amount == b.Amount then
-					return (a.class or "") < (b.class or "")
+			if priority_a ~= priority_b then
+				return priority_a < priority_b
+			end
+
+			-- Within the same priority group, secondary sorting
+			if priority_a == 4 then -- Ammo
+				local caliber_a = a.Caliber
+				local caliber_b = b.Caliber
+
+				if caliber_a == caliber_b then
+					if a.Amount == b.Amount then
+						return (a.class or "") < (b.class or "")
+					else
+						return (a.Amount or 0) > (b.Amount or 0)
+					end
 				else
-					return (a.Amount or 0) > (b.Amount or 0)
+					return (caliber_a or "") < (caliber_b or "")
 				end
+			elseif priority_a == 1 or priority_a == 2 then -- Meds, Parts
+				return (a.Amount or 0) > (b.Amount or 0)
+			elseif priority_a == 9 or priority_a == 10 or priority_a == 11 then -- SkillMags, Valuables
+				if a.class == b.class then
+					local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
+					local amount_b = (IsKindOf(b, InventoryStackClass) and b.Amount) or 1
+					return amount_a > amount_b
+				end
+				return (a.class or "") < (b.class or "")
 			else
-				return (caliber_a or "") < (caliber_b or "")
+				-- For other groups, sort by class name then amount
+				if a.class == b.class then
+					local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
+					local amount_b = (IsKindOf(b, InventoryStackClass) and b.Amount) or 1
+					return amount_a > amount_b
+				end
+				return (a.class or "") < (b.class or "")
 			end
-		elseif priority_a == 1 or priority_a == 2 then -- Meds, Parts
-			return (a.Amount or 0) > (b.Amount or 0)
-		elseif priority_a == 9 or priority_a == 10 or priority_a == 11 then -- SkillMags, Valuables
-			if a.class == b.class then
-				local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
-				local amount_b = (IsKindOf(b, InventoryStackClass) and b.Amount) or 1
-				return amount_a > amount_b
-			end
-			return (a.class or "") < (b.class or "")
-		else
-			-- For other groups, sort by class name then amount
-			if a.class == b.class then
-				local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
-				local amount_b = (IsKindOf(b, InventoryStackClass) and b.Amount) or 1
-				return amount_a > amount_b
-			end
-			return (a.class or "") < (b.class or "")
-		end
-	end)
+		end)
 
-	gv_Squads[squad_id].squad_bag = all_items
+		gv_Squads[squad_id].squad_bag = all_items
+
+		-- 5. Final Cleanup: Destroy original items only after successful replacement
+		for _, item in ipairs(items_to_destroy) do
+			DoneObject(item)
+		end
+	else
+		-- Rollback: Destroy the failed copy
+		for _, item in ipairs(all_items) do
+			DoneObject(item)
+		end
+		print("[SBDR] [Warning] _SortItemsInBag: Verification failed. Sorting aborted to prevent item loss.")
+	end
 
 	-- Centralized UI Refresh (can be suppressed for batch operations)
 	if SquadBagDoneRight.suppress_ui_refresh then

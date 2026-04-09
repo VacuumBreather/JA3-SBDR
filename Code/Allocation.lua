@@ -96,7 +96,7 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 	end
 
 	-- 3. Distribute ammo back to squads
-	local new_items = {} -- { [squad_id] = { { item = item }, ... } }
+	local new_items_per_squad = {} -- { [squad_id] = { { item = item }, ... } }
 	local success = true
 
 	for caliber, classes in pairs(total_ammo) do
@@ -131,8 +131,8 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 							if IsKindOf(new_item, InventoryStackClass) then
 								new_item.Amount = share
 							end
-							new_items[squad_id] = new_items[squad_id] or {}
-							table.insert(new_items[squad_id], new_item)
+							new_items_per_squad[squad_id] = new_items_per_squad[squad_id] or {}
+							table.insert(new_items_per_squad[squad_id], new_item)
 							remaining_amount = remaining_amount - share
 							-- print(string.format("[SBDR] AllocateAmmoInSector:   -> Squad %s gets %d of %s (proportional, squad need %d / total need %d)", tostring(squad_id), share, class_id, squad_need, total_need))
 						else
@@ -172,8 +172,8 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 							if IsKindOf(new_item, InventoryStackClass) then
 								new_item.Amount = share
 							end
-							new_items[squad_id] = new_items[squad_id] or {}
-							table.insert(new_items[squad_id], new_item)
+							new_items_per_squad[squad_id] = new_items_per_squad[squad_id] or {}
+							table.insert(new_items_per_squad[squad_id], new_item)
 							remaining_amount = remaining_amount - share
 							-- print(string.format("[SBDR] AllocateAmmoInSector:   -> Squad %s gets %d of %s (weighted share, %d units)", tostring(squad_id), share, class_id, num_units))
 						else
@@ -188,9 +188,35 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 		if not success then break end
 	end
 
+	-- 4. Checksum Verification before finalizing
+	if success then
+		local checksum_before = {} -- class -> total_amount
+		for caliber, classes in pairs(total_ammo) do
+			for class_id, data in pairs(classes) do
+				checksum_before[class_id] = (checksum_before[class_id] or 0) + data.total_amount
+			end
+		end
+
+		local checksum_after = {} -- class -> total_amount
+		for squad_id, items in pairs(new_items_per_squad) do
+			for _, item in ipairs(items) do
+				local amt = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
+				checksum_after[item.class] = (checksum_after[item.class] or 0) + amt
+			end
+		end
+
+		for class_id, before_total in pairs(checksum_before) do
+			if before_total ~= (checksum_after[class_id] or 0) then
+				success = false
+				print(string.format("[SBDR] [Error] AllocateAmmoInSector: Verification failed for %s (before: %d, after: %d)", class_id, before_total, checksum_after[class_id] or 0))
+				break
+			end
+		end
+	end
+
 	if success then
 		-- Apply changes
-		for squad_id, items in pairs(new_items) do
+		for squad_id, items in pairs(new_items_per_squad) do
 			local squad = gv_Squads[squad_id]
 			if squad then
 				squad.squad_bag = squad.squad_bag or {}
@@ -205,14 +231,17 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 			DoneObject(item)
 		end
 	else
-		-- Revert: put collected ammo back
-		for _, item in ipairs(items_to_destroy) do
-			local squad = squads[1]
-			squad.squad_bag = squad.squad_bag or {}
-			table.insert(squad.squad_bag, item)
+		-- Revert: put collected ammo back in first squad
+		local first_squad = squads[1]
+		if first_squad then
+			first_squad.squad_bag = first_squad.squad_bag or {}
+			for _, item in ipairs(items_to_destroy) do
+				table.insert(first_squad.squad_bag, item)
+			end
 		end
+
 		-- Destroy any new items created before failure
-		for _, items in pairs(new_items) do
+		for _, items in pairs(new_items_per_squad) do
 			for _, itm in ipairs(items) do
 				DoneObject(itm)
 			end
@@ -367,6 +396,26 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 		end
 
 		if success then
+			-- Verification Checksum
+			local checksum_before = 0
+			for _, count in pairs(total_items) do
+				checksum_before = checksum_before + count
+			end
+
+			local checksum_after = 0
+			for _, items in pairs(new_items) do
+				for _, itm in ipairs(items) do
+					checksum_after = checksum_after + ((IsKindOf(itm, InventoryStackClass) and itm.Amount) or 1)
+				end
+			end
+
+			if checksum_before ~= checksum_after then
+				success = false
+				print(string.format("[SBDR] [Error] AllocateCraftablesInSector: Verification failed (before: %d, after: %d)", checksum_before, checksum_after))
+			end
+		end
+
+		if success then
 			-- Apply changes
 			for squad_id, items in pairs(new_items) do
 				local squad = gv_Squads[squad_id]
@@ -384,11 +433,14 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 			end
 		else
 			-- Revert
-			for _, item in ipairs(items_to_destroy) do
-				local squad = squads[1]
-				squad.squad_bag = squad.squad_bag or {}
-				table.insert(squad.squad_bag, item)
+			local first_squad = squads[1]
+			if first_squad then
+				first_squad.squad_bag = first_squad.squad_bag or {}
+				for _, item in ipairs(items_to_destroy) do
+					table.insert(first_squad.squad_bag, item)
+				end
 			end
+
 			for _, items in pairs(new_items) do
 				for _, itm in ipairs(items) do
 					DoneObject(itm)
@@ -512,6 +564,19 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 		end
 
 		if success then
+			-- Verification Checksum
+			local checksum_after = 0
+			for _, itm in pairs(new_items) do
+				checksum_after = checksum_after + (itm.Amount or 1)
+			end
+
+			if total_meds ~= checksum_after then
+				success = false
+				print(string.format("[SBDR] [Error] AllocateMedsInSector: Verification failed (before: %d, after: %d)", total_meds, checksum_after))
+			end
+		end
+
+		if success then
 			-- Apply changes
 			for squad_id, new_item in pairs(new_items) do
 				local squad = gv_Squads[squad_id]
@@ -526,13 +591,15 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 				DoneObject(item)
 			end
 		else
-			-- Revert: put collected meds back
-			for _, item in ipairs(collected_meds) do
-				-- Try to find the squad it belonged to or just put in the first squad's bag
-				local squad = squads[1]
-				squad.squad_bag = squad.squad_bag or {}
-				table.insert(squad.squad_bag, item)
+			-- Revert: put collected meds back in first squad
+			local first_squad = squads[1]
+			if first_squad then
+				first_squad.squad_bag = first_squad.squad_bag or {}
+				for _, item in ipairs(collected_meds) do
+					table.insert(first_squad.squad_bag, item)
+				end
 			end
+
 			-- Destroy any new items created before failure
 			for _, item in pairs(new_items) do
 				DoneObject(item)
