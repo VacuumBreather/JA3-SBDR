@@ -1,7 +1,7 @@
 ﻿--- @module SquadBagDoneRight
 --- @desc This mod handles moving specific crafting, skill, and valuable items to the squad bag automatically.
 
-SquadBagDoneRight = SquadBagDoneRight or {}
+SquadBagDoneRight = rawget(_G, "SquadBagDoneRight") or {}
 
 SquadBagDoneRight.lists = {
 	craftingItems = {
