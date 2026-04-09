@@ -3,8 +3,8 @@ id,text
 548200001002,ALLOCATE CRAFTABLES
 548200001003,Allows moving crafting items to the squad bag
 548200001004,Allows moving skill magazines to the squad bag
-548200001005,Allows moving valuables (and money bags) to the squad bag
-548200001006,Enable to move items from merc inventories to the squad bag automatically. Note: this will only be triggered on game start/load or when the mod options are changed.
+548200001005,"Allows moving valuables (and money bags) to the squad bag"
+548200001006,"Enable to move items from merc inventories to the squad bag automatically. Note: this will only be triggered on game start/load or when the mod options are changed."
 548200001007,Crafting items to squad bag
 548200001008,Skill mags to squad bag
 548200001009,Valuables to squad bag
@@ -28,15 +28,15 @@ id,text
 548200001027,Priority: 40mm Shells
 548200001028,Sorting priority for 40mm shells (1 is highest)
 548200001029,Priority: Explosives
-548200001030,Sorting priority for explosives like C4, TNT, PETN (1 is highest)
+548200001030,"Sorting priority for explosives like C4, TNT, PETN (1 is highest)"
 548200001031,Priority: Detonators
-548200001032,Sorting priority for proximity, remote, and time detonators (1 is highest)
+548200001032,"Sorting priority for proximity, remote, and time detonators (1 is highest)"
 548200001033,Priority: Armor Upgrades
-548200001034,Sorting priority for ceramic plates, weave padding, and kompositum-58 (1 is highest)
-548200001035,Priority: Tools / Utility
-548200001036,Sorting priority for balancing weights and sharpeners (1 is highest)
+548200001034,"Sorting priority for ceramic plates, weave padding, and kompositum-58 (1 is highest)"
+548200001035,"Priority: Tools / Utility"
+548200001036,"Sorting priority for balancing weights and sharpeners (1 is highest)"
 548200001037,Priority: Misc Craftables
-548200001038,Sorting priority for steel pipes, lenses, and microchips (1 is highest)
+548200001038,"Sorting priority for steel pipes, lenses, and microchips (1 is highest)"
 548200001039,Priority: Skill Magazines
 548200001040,Sorting priority for skill magazines (1 is highest)
 548200001041,Priority: Valuables (Stackable)
