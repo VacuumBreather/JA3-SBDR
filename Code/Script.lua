@@ -130,15 +130,12 @@ local function GetSortPriority(item)
 	-- Skill Magazines
 	if string.starts_with(class, "SkillMag_") then return 14 end
 
-	-- Consumables
-	if class == "MetaviraShot" or class == "CombatStim" then return 15 end
-
 	-- Valuables: prioritize stackable valuables over non-stackable ones
 	if IsKindOf(item, "Valuables") or class == "MoneyBag" then
 		if IsKindOf(item, InventoryStackClass) then
-			return 16
+			return 15
 		else
-			return 17
+			return 16
 		end
 	end
 
