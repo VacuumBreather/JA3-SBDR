@@ -85,57 +85,62 @@ end
 --- @return number The sort priority value (lower is higher priority).
 local function GetSortPriority(item)
 	local class = item.class
+	local options = CurrentModOptions or {}
 
-	-- Priority mapping for organized inventory
-	if class == "Meds" then return 1 end
-	if class == "Parts" then return 2 end
-	if class == "BlackPowder" then return 3 end
-	if IsKindOf(item, "Ammo") then return 4 end
+	-- Priority mapping for organized inventory using mod options
+	if class == "Meds" then return tonumber(options.sbdr_priority_meds) or 1 end
+	if class == "Parts" then return tonumber(options.sbdr_priority_parts) or 2 end
+	if class == "BlackPowder" then return tonumber(options.sbdr_priority_blackpowder) or 3 end
+	if IsKindOf(item, "Ammo") then return tonumber(options.sbdr_priority_ammo) or 4 end
 
 	-- Flare ammo
-	if class == "FlareAmmo" then return 5 end
+	if class == "FlareAmmo" then return tonumber(options.sbdr_priority_flareammo) or 5 end
 
 	-- Mortar shells
-	if string.starts_with(class, "MortarShell_") then return 6 end
+	if string.starts_with(class, "MortarShell_") then return tonumber(options.sbdr_priority_mortarshells) or 6 end
 
 	-- Warheads
-	if class == "Warhead_Frag" then return 7 end
+	if class == "Warhead_Frag" then return tonumber(options.sbdr_priority_warheads) or 7 end
 
 	-- 40mm shells
-	if string.starts_with(class, "_40mm") then return 8 end
+	if string.starts_with(class, "_40mm") then return tonumber(options.sbdr_priority_40mmshells) or 8 end
 
 	-- Explosives
-	if class == "C4" or class == "PETN" or class == "TNT" then return 9 end
+	if class == "C4" or class == "PETN" or class == "TNT" then return tonumber(options.sbdr_priority_explosives) or 9 end
 
 	-- Detonators
 	if class == "Combination_Detonator_Proximity" or
 	   class == "Combination_Detonator_Remote" or
 	   class == "Combination_Detonator_Time" then
-		return 10
+		return tonumber(options.sbdr_priority_detonators) or 10
 	end
 
 	-- Armor upgrades
 	if class == "Combination_CeramicPlates" or
 	   class == "Combination_WeavePadding" or
 	   class == "Combination_Kompositum58" then
-		return 11
+		return tonumber(options.sbdr_priority_armorupgrades) or 11
 	end
 
 	-- Weapon parts / Utility
-	if class == "Combination_BalancingWeight" or class == "Combination_Sharpener" then return 12 end
+	if class == "Combination_BalancingWeight" or class == "Combination_Sharpener" then
+		return tonumber(options.sbdr_priority_tools) or 12
+	end
 
 	-- Weapon parts / Utility
-	if class == "FineSteelPipe" or class == "OpticalLens" or class == "Microchip" then return 13 end
+	if class == "FineSteelPipe" or class == "OpticalLens" or class == "Microchip" then
+		return tonumber(options.sbdr_priority_misc_craftables) or 13
+	end
 
 	-- Skill Magazines
-	if string.starts_with(class, "SkillMag_") then return 14 end
+	if string.starts_with(class, "SkillMag_") then return tonumber(options.sbdr_priority_skillmags) or 14 end
 
 	-- Valuables: prioritize stackable valuables over non-stackable ones
 	if IsKindOf(item, "Valuables") or class == "MoneyBag" then
 		if IsKindOf(item, InventoryStackClass) then
-			return 15
+			return tonumber(options.sbdr_priority_valuables_stackable) or 15
 		else
-			return 16
+			return tonumber(options.sbdr_priority_valuables_single) or 16
 		end
 	end
 
@@ -640,7 +645,7 @@ function _SortItemsInBag(squad_id)
 			end
 
 			-- Secondary sort logic for specific groups (Ammo, Meds, Valuables)
-			if priority_a == 4 then -- Ammo group
+			if IsKindOf(a, "Ammo") then -- Ammo group
 				local caliber_a = a.Caliber
 				local caliber_b = b.Caliber
 
@@ -654,10 +659,10 @@ function _SortItemsInBag(squad_id)
 				else
 					return (caliber_a or "") < (caliber_b or "")
 				end
-			elseif priority_a == 1 or priority_a == 2 then -- Meds, Parts
+			elseif a.class == "Meds" or a.class == "Parts" then -- Meds, Parts
 				-- Sort by descending amount
 				return (a.Amount or 0) > (b.Amount or 0)
-			elseif priority_a == 9 or priority_a == 10 or priority_a == 11 then -- SkillMags, Valuables
+			elseif string.starts_with(a.class, "SkillMag_") or IsKindOf(a, "Valuables") or a.class == "MoneyBag" then -- SkillMags, Valuables
 				-- Sort by class name, then descending amount
 				if a.class == b.class then
 					local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
