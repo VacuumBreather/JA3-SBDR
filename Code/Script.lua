@@ -659,17 +659,6 @@ function _SortItemsInBag(squad_id)
 				else
 					return (caliber_a or "") < (caliber_b or "")
 				end
-			elseif a.class == "Meds" or a.class == "Parts" then -- Meds, Parts
-				-- Sort by descending amount
-				return (a.Amount or 0) > (b.Amount or 0)
-			elseif string.starts_with(a.class, "SkillMag_") or IsKindOf(a, "Valuables") or a.class == "MoneyBag" then -- SkillMags, Valuables
-				-- Sort by class name, then descending amount
-				if a.class == b.class then
-					local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
-					local amount_b = (IsKindOf(b, InventoryStackClass) and b.Amount) or 1
-					return amount_a > amount_b
-				end
-				return (a.class or "") < (b.class or "")
 			else
 				-- Generic fallback: sort by class name, then descending amount
 				if a.class == b.class then
@@ -1001,6 +990,11 @@ end
 --- Validates persistent state and prepares target lists after loading a savegame.
 function OnMsg.LoadSessionData()
 	SquadBagDoneRight:UpdateProperties()
+
+	-- Re-sort and refresh all bags
+	for _, squad in pairs(gv_Squads or {}) do
+		_SortItemsInBag(squad.UniqueId)
+	end
 end
 
 --- Re-applies mod options and updates inventories when options are changed by the user.
