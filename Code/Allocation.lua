@@ -1,7 +1,10 @@
 ﻿--- @module ModAllocation
 --- @desc Handles ammo and craftables allocation among squads in the same sector.
 
-if not SquadBagDoneRight then SquadBagDoneRight = {} end
+-- Use rawget to bypass the engine's strict mode check for undefined globals
+if rawget(_G, "SquadBagDoneRight") == nil then
+	SquadBagDoneRight = {}
+end
 local InventoryStackClass = SquadBagDoneRight.InventoryStackClass or "InventoryStack"
 local SquadBagItemClass = SquadBagDoneRight.SquadBagItemClass or "SquadBagItem"
 

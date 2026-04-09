@@ -1,7 +1,10 @@
 ﻿--- @module SquadBagDoneRight
 --- @desc This mod handles moving specific crafting, skill, and valuable items to the squad bag automatically.
 
-SquadBagDoneRight = rawget(_G, "SquadBagDoneRight") or {}
+-- Use rawget to bypass the engine's strict mode check for undefined globals
+if rawget(_G, "SquadBagDoneRight") == nil then
+	SquadBagDoneRight = {}
+end
 SquadBagDoneRight.SquadBagItemClass = "SquadBagItem"
 SquadBagDoneRight.InventoryStackClass = "InventoryStack"
 
