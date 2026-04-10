@@ -36,6 +36,8 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 	-- 1. COLLECTION PHASE: Gather all ammo from all player squad bags in the sector
 	local total_ammo = {} -- Map: { [caliber] = { [class] = { items = {}, total_amount = 0 } } }
 	local items_to_destroy = {} -- List of original item objects to be removed later
+	local total_units = 0
+
 	for _, squad in ipairs(squads) do
 		local bag = squad.squad_bag or {}
 		-- Traverse bag backwards to safely remove items while iterating
@@ -59,6 +61,8 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 				table.remove(bag, i)
 			end
 		end
+		
+		total_units = total_units + #(squad.units or {})
 	end
 
 	-- 2. NEEDS ASSESSMENT: Calculate the total magazine capacity for each caliber per squad
@@ -139,11 +143,6 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 				end
 			else
 				-- OPTION B: No squad uses this caliber, distribute equally by squad member count
-				local total_units = 0
-				for _, squad in ipairs(squads) do
-					total_units = total_units + #(squad.units or {})
-				end
-
 				for i, squad in ipairs(squads) do
 					local squad_id = squad.UniqueId
 					local num_units = #(squad.units or {})
@@ -293,6 +292,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 		-- 2. ASSESSMENT: Determine the "effective skill" for each squad for distribution weighting
 		local squad_skills = {}
 		local total_skill = 0
+		local total_units = 0
 		for _, squad in ipairs(squads) do
 			local squad_effective_skill = 0
 			if sum_skills then
@@ -326,6 +326,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 
 			squad_skills[squad.UniqueId] = squad_effective_skill
 			total_skill = total_skill + squad_effective_skill
+			total_units = total_units + #(squad.units or {})
 		end
 
 		-- 3. DISTRIBUTION: Create and assign new items based on weighted skill shares
@@ -334,6 +335,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 
 		for class_id, total_amount in pairs(total_items) do
 			local remaining = total_amount
+
 			for i, squad in ipairs(squads) do
 				local share = 0
 				if total_skill > 0 then
@@ -346,11 +348,6 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 					end
 				else
 					-- CASE B: No specialist found, distribute equally by mercenary count
-					local total_units = 0
-					for _, s in ipairs(squads) do
-						total_units = total_units + #(s.units or {})
-					end
-
 					local num_units = #(squad.units or {})
 					if total_units > 0 then
 						if i == #squads then
@@ -505,6 +502,11 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 		local new_items = {}
 		local success = true
 
+		local total_units = 0
+		for _, s in ipairs(squads) do
+			total_units = total_units + #(s.units or {})
+		end
+
 		for i, squad in ipairs(squads) do
 			local share = 0
 			if total_need > 0 then
@@ -517,11 +519,6 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 				end
 			else
 				-- CASE B: No kits found, distribute equally by mercenary count
-				local total_units = 0
-				for _, s in ipairs(squads) do
-					total_units = total_units + #(s.units or {})
-				end
-
 				local num_units = #(squad.units or {})
 				if total_units > 0 then
 					if i == #squads then
