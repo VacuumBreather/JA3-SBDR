@@ -489,159 +489,82 @@ end
 --- Internal function to sort and stack items in a specific squad bag.
 --- @param squad_id string The ID of the squad whose bag is to be sorted.
 function _SortItemsInBag(squad_id)
-	-- Safety check: ensure squad and bag exist
-	if not gv_Squads or not gv_Squads[squad_id] then
-		return
-	end
+    if not gv_Squads or not gv_Squads[squad_id] then return end
+    local bag = gv_Squads[squad_id].squad_bag
+    if not bag or #bag == 0 then return end
 
-	local bag = gv_Squads[squad_id].squad_bag
-	if not bag or #bag == 0 then
-		return
-	end
+    -- Merge stacks in place, same as original
+    local stacks = {}
+    for _, item in ipairs(bag) do
+        if item and IsKindOf(item, InventoryStackClass) then
+            local merged = false
+            for _, existing in ipairs(stacks) do
+                if existing.class == item.class then
+                    local to_add = Min(existing.MaxStacks - existing.Amount, item.Amount)
+                    if to_add > 0 then
+                        existing.Amount = existing.Amount + to_add
+                        item.Amount = item.Amount - to_add
+                    end
+                    if item.Amount <= 0 then
+                        DoneObject(item)
+                        merged = true
+                        break
+                    end
+                end
+            end
+            if not merged then
+                stacks[#stacks + 1] = item
+            end
+        elseif item then
+            stacks[#stacks + 1] = item
+        end
+    end
 
-	-- 1. Checksum Before: Record total quantity per class before sorting/merging
-	local checksum_before = {}
-	local items_to_destroy = {} -- Track original items for safe destruction after verification
-	for _, item in ipairs(bag) do
-		if item then
-			local amount = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
-			checksum_before[item.class] = (checksum_before[item.class] or 0) + amount
-			table.insert(items_to_destroy, item)
+	table.sort(stacks, function(a, b)
+		local priority_a = GetSortPriority(a)
+		local priority_b = GetSortPriority(b)
+
+		-- First sort by the primary priority group
+		if priority_a ~= priority_b then
+			return priority_a < priority_b
 		end
-	end
 
-	-- 2. Transactional Stacking: Re-organize items into a new list of objects
-	local stacks = {}
-	local non_stackables = {}
+		-- Secondary sort logic for specific groups (Ammo, Meds, Valuables)
+		if IsKindOf(a, "Ammo") then -- Ammo group
+			local caliber_a = a.Caliber
+			local caliber_b = b.Caliber
 
-	for _, original_item in ipairs(bag) do
-		if original_item then
-			local amount = (IsKindOf(original_item, InventoryStackClass) and original_item.Amount) or 1
-			local class = original_item.class
-
-			if not IsKindOf(original_item, InventoryStackClass) then
-				-- Handle non-stackable items: recreate a fresh object
-				local new_item = PlaceInventoryItem(class)
-				if new_item then
-					non_stackables[#non_stackables + 1] = new_item
+			if caliber_a == caliber_b then
+				-- Same caliber: sort by class then by descending amount
+				if a.Amount == b.Amount then
+					return (a.class or "") < (b.class or "")
 				else
-					print(string.format("[SBDR] [Error] _SortItemsInBag: Failed to recreate non-stackable %s", class))
+					return (a.Amount or 0) > (b.Amount or 0)
 				end
 			else
-				-- Handle stackable items: merge into existing simulation stacks or create new ones
-				local remaining = amount
-				-- Attempt to fill existing partially-filled stacks in the simulation list
-				for _, stack in ipairs(stacks) do
-					if stack.class == class and stack.Amount < stack.MaxStacks then
-						local to_add = Min(stack.MaxStacks - stack.Amount, remaining)
-						stack.Amount = stack.Amount + to_add
-						remaining = remaining - to_add
-						if remaining <= 0 then break end
-					end
-				end
-
-				-- Create new stacks for any remaining quantity
-				while remaining > 0 do
-					local new_stack = PlaceInventoryItem(class)
-					if new_stack then
-						local to_add = Min(new_stack.MaxStacks, remaining)
-						new_stack.Amount = to_add
-						stacks[#stacks + 1] = new_stack
-						remaining = remaining - to_add
-					else
-						-- Fatal error in item recreation
-						print(string.format("[SBDR] [Error] _SortItemsInBag: Failed to recreate stackable %s", class))
-						remaining = 0
-					end
-				end
+				return (caliber_a or "") < (caliber_b or "")
 			end
-		end
-	end
-
-	-- Combine stackable and non-stackable items into a single list
-	local all_items = ConcatTables(stacks, non_stackables)
-
-	-- 3. Checksum After: Verify total quantity matches the starting state
-	local checksum_after = {}
-	for _, item in ipairs(all_items) do
-		local amount = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
-		checksum_after[item.class] = (checksum_after[item.class] or 0) + amount
-	end
-
-	local verified = true
-	for class, count_before in pairs(checksum_before) do
-		if count_before ~= (checksum_after[class] or 0) then
-			verified = false
-			print(string.format("[SBDR] [Error] _SortItemsInBag: Verification failed for %s (before: %d, after: %d)", class, count_before, checksum_after[class] or 0))
-			break
-		end
-	end
-
-	-- --- Final Commitment ---
-	if verified then
-		-- 4. Apply Sort Priority Logic
-		table.sort(all_items, function(a, b)
-			local priority_a = GetSortPriority(a)
-			local priority_b = GetSortPriority(b)
-
-			-- First sort by the primary priority group
-			if priority_a ~= priority_b then
-				return priority_a < priority_b
+		else
+			-- Generic fallback: sort by class name, then descending amount
+			if a.class == b.class then
+				local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
+				local amount_b = (IsKindOf(b, InventoryStackClass) and b.Amount) or 1
+				return amount_a > amount_b
 			end
-
-			-- Secondary sort logic for specific groups (Ammo, Meds, Valuables)
-			if IsKindOf(a, "Ammo") then -- Ammo group
-				local caliber_a = a.Caliber
-				local caliber_b = b.Caliber
-
-				if caliber_a == caliber_b then
-					-- Same caliber: sort by class then by descending amount
-					if a.Amount == b.Amount then
-						return (a.class or "") < (b.class or "")
-					else
-						return (a.Amount or 0) > (b.Amount or 0)
-					end
-				else
-					return (caliber_a or "") < (caliber_b or "")
-				end
-			else
-				-- Generic fallback: sort by class name, then descending amount
-				if a.class == b.class then
-					local amount_a = (IsKindOf(a, InventoryStackClass) and a.Amount) or 1
-					local amount_b = (IsKindOf(b, InventoryStackClass) and b.Amount) or 1
-					return amount_a > amount_b
-				end
-				return (a.class or "") < (b.class or "")
-			end
-		end)
-
-		-- Update the persistent bag data with the verified and sorted list
-		gv_Squads[squad_id].squad_bag = all_items
-
-		-- 5. Cleanup: Safely destroy the original objects now that replacements are active
-		for _, item in ipairs(items_to_destroy) do
-			DoneObject(item)
+			return (a.class or "") < (b.class or "")
 		end
-	else
-		-- Rollback: Verification failed, destroy the simulation objects to avoid duplication
-		for _, item in ipairs(all_items) do
-			DoneObject(item)
-		end
-		print("[SBDR] [Warning] _SortItemsInBag: Verification failed. Sorting aborted to prevent item loss.")
-	end
+	end)
 
-	-- --- UI Synchronization ---
-	-- Skip if we are mid-batch (to avoid flickering/performance hit)
-	if SquadBagDoneRight.suppress_ui_refresh then
-		return
-	end
+    gv_Squads[squad_id].squad_bag = stacks
 
-	-- Force refresh the open inventory UI if it corresponds to the modified squad
-	if gv_SquadBag and gv_SquadBag.squad_id == squad_id then
-		if InventoryUIResetSquadBag then InventoryUIResetSquadBag() end
-		gv_SquadBag:SetSquadId(squad_id)
-		if InventoryUIRespawn then InventoryUIRespawn() end
-	end
+    -- UI refresh
+    if SquadBagDoneRight.suppress_ui_refresh then return end
+
+    if gv_SquadBag and gv_SquadBag.squad_id == squad_id then
+        if InventoryUIResetSquadBag then InventoryUIResetSquadBag() end
+        gv_SquadBag:SetSquadId(squad_id)
+        if InventoryUIRespawn then InventoryUIRespawn() end
+    end
 end
 
 -- Patching ItemIsFound to include SquadBag in its search logic.
