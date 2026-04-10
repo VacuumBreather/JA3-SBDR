@@ -55,7 +55,7 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 				total_ammo[caliber][item.class].total_amount = total_ammo[caliber][item.class].total_amount + amt
 
 				-- Store for safe destruction and remove from the current bag
-				table.insert(items_to_destroy, item)
+				table.insert(items_to_destroy, { item = item, origin = squad })
 				table.remove(bag, i)
 			end
 		end
@@ -157,8 +157,8 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 							share = Min(share, remaining_amount)
 						end
 					else
-						-- Fallback for squads with no units
-						share = (i == #squads) and remaining_amount or (data.total_amount / #squads)
+						-- Fallback for empty squads
+						share = (i == #squads) and remaining_amount or Floor(data.total_amount / #squads)
 					end
 
 					if share > 0 then
@@ -223,17 +223,14 @@ function SquadBagDoneRight:AllocateAmmoInSector(sector_id, squads)
 		end
 
 		-- Clean up the original item objects
-		for _, item in ipairs(items_to_destroy) do
-			DoneObject(item)
+		for _, entry in ipairs(items_to_destroy) do
+			DoneObject(entry.item)
 		end
 	else
 		-- ROLLBACK: On error or verification failure, restore original items to the first squad
-		local first_squad = squads[1]
-		if first_squad then
-			first_squad.squad_bag = first_squad.squad_bag or {}
-			for _, item in ipairs(items_to_destroy) do
-				table.insert(first_squad.squad_bag, item)
-			end
+		for _, entry in ipairs(items_to_destroy) do
+			entry.origin.squad_bag = entry.origin.squad_bag or {}
+			table.insert(entry.origin.squad_bag, entry.item)
 		end
 
 		-- Destroy any transient item objects created during the failed distribution
@@ -282,7 +279,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 				if item and table.find(item_list, item.class) then
 					local amt = (IsKindOf(item, InventoryStackClass) and item.Amount or 1)
 					total_items[item.class] = (total_items[item.class] or 0) + amt
-					table.insert(items_to_destroy, item)
+					table.insert(items_to_destroy, { item = item, origin = squad })
 					table.remove(bag, i) -- Remove from squad bag to keep persistent state clean for simulation
 				end
 			end
@@ -364,7 +361,7 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 						end
 					else
 						-- Fallback for empty squads
-						share = (i == #squads) and remaining or (total_amount / #squads)
+						share = (i == #squads) and remaining or Floor(total_amount / #squads)
 					end
 				end
 
@@ -421,17 +418,14 @@ function SquadBagDoneRight:AllocateCraftablesInSector(sector_id, squads)
 			end
 
 			-- Safely destroy the original objects
-			for _, item in ipairs(items_to_destroy) do
-				DoneObject(item)
+			for _, entry in ipairs(items_to_destroy) do
+				DoneObject(entry.item)
 			end
 		else
 			-- ROLLBACK: Restore original items to the first squad if distribution failed
-			local first_squad = squads[1]
-			if first_squad then
-				first_squad.squad_bag = first_squad.squad_bag or {}
-				for _, item in ipairs(items_to_destroy) do
-					table.insert(first_squad.squad_bag, item)
-				end
+			for _, entry in ipairs(items_to_destroy) do
+				entry.origin.squad_bag = entry.origin.squad_bag or {}
+				table.insert(entry.origin.squad_bag, entry.item)
 			end
 
 			-- Destroy any transient item objects created during the failed pass
@@ -469,10 +463,10 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 	end
 
 	local total_meds = 0
-	local items_to_destroy = {}
 
 	-- 1. COLLECTION PHASE: Sweep all squad bags for "Meds" (the resource)
 	local collected_meds = {}
+
 	for _, squad in ipairs(squads) do
 		local bag = squad.squad_bag or {}
 		for i = #bag, 1, -1 do
@@ -480,7 +474,7 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 			if item.class == "Meds" then
 				local amt = (item.Amount or 1)
 				total_meds = total_meds + amt
-				table.insert(collected_meds, item)
+				table.insert(collected_meds, { item = item, origin = squad })
 				table.remove(bag, i) -- Simulation safety: remove from persistent bag before redistribute
 			end
 		end
@@ -538,7 +532,7 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 					end
 				else
 					-- Fallback for empty squads
-					share = (i == #squads) and remaining or (total_meds / #squads)
+					share = (i == #squads) and remaining or Floor(total_meds / #squads)
 				end
 			end
 
@@ -581,17 +575,14 @@ function SquadBagDoneRight:AllocateMedsInSector(sector_id, squads)
 			end
 
 			-- Destroy original Meds objects
-			for _, item in ipairs(collected_meds) do
-				DoneObject(item)
+			for _, entry in ipairs(collected_meds) do
+				DoneObject(entry.item)
 			end
 		else
 			-- ROLLBACK: Restore original items if distribution failed
-			local first_squad = squads[1]
-			if first_squad then
-				first_squad.squad_bag = first_squad.squad_bag or {}
-				for _, item in ipairs(collected_meds) do
-					table.insert(first_squad.squad_bag, item)
-				end
+			for _, entry in ipairs(collected_meds) do
+				entry.origin.squad_bag = entry.origin.squad_bag or {}
+				table.insert(entry.origin.squad_bag, entry.item)
 			end
 
 			-- Destroy transient objects

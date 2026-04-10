@@ -7,7 +7,7 @@ return PlaceObj('ModDef', {
 	'author', "KeldorKatarn",
 	'version_major', 1,
 	'version_minor', 7,
-	'version', 31,
+	'version', 32,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -42,7 +42,7 @@ return PlaceObj('ModDef', {
 		sbdr_skill_mags = true,
 		sbdr_valuables = true,
 	},
-	'saved', 1775713878,
+	'saved', 1775848680,
 	'code_hash', -9134332664307387298,
 	'screenshot1', "Mod/QGujmyS/Images/screenshot1.jpg",
 	'screenshot2', "Mod/QGujmyS/Images/screenshot2.jpg",

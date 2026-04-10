@@ -198,7 +198,20 @@ function SquadBagDoneRight:MoveAllMercsInventoryToSquadBag()
 		-- Only process player-controlled squads that have units and a valid bag
 		if squad.Side == "player1" and squad.units and squad.squad_bag then
 			local moved_items = {} -- Log of items to move: [{ unit, slot_name, item, moved_amount }]
-			local bag_copy = table.copy(squad.squad_bag) -- Transactional work: operate on a copy first
+			
+			-- PHASE 0: Create a deep copy of the squad bag items for simulation
+			local bag_copy = {}
+			for _, item in ipairs(squad.squad_bag) do
+				local copy = PlaceInventoryItem(item.class)
+				if copy then
+					if IsKindOf(copy, InventoryStackClass) and IsKindOf(item, InventoryStackClass) then
+						copy.Amount = item.Amount
+					end
+					table.insert(bag_copy, copy)
+				else
+					print(string.format("[SBDR] [Error] Failed to create simulation copy for item %s", tostring(item.class)))
+				end
+			end
 
 			-- --- Verification Step: Record total quantity per class BEFORE the move ---
 			local amounts_before = {} -- Map: class -> total_amount
@@ -324,11 +337,19 @@ function SquadBagDoneRight:MoveAllMercsInventoryToSquadBag()
 
 			-- --- Final Transactional Commitment ---
 			if verified then
-				-- 3. Replace the actual squad bag with our validated copy
+				-- Destroy the original bag objects before replacing the reference
+				for _, item in ipairs(squad.squad_bag) do
+					DoneObject(item)
+				end
+
+				-- Replace the actual squad bag with our validated copy
 				squad.squad_bag = bag_copy
 
-				-- 4. Final Cleanup: Only remove/destroy original objects once the bag is safely updated
+				-- Final Cleanup: Only remove/destroy original objects once the bag is safely updated
 				for _, move in ipairs(moved_items) do
+					-- Send message for UI/logic hooks
+					Msg("SquadBagAddItem", move.item, move.moved_amount)
+
 					if IsKindOf(move.item, InventoryStackClass) then
 						-- Deduct the moved amount from the source item
 						move.item.Amount = move.item.Amount - move.moved_amount
@@ -343,20 +364,11 @@ function SquadBagDoneRight:MoveAllMercsInventoryToSquadBag()
 						move.unit:RemoveItem(move.slot_name, move.item)
 						DoneObject(move.item)
 					end
-
-					-- Send message for UI/logic hooks
-					Msg("SquadBagAddItem", move.item, move.moved_amount)
 				end
 			else
 				-- Rollback: Clean up newly created objects from the failed simulation
 				for _, item in ipairs(bag_copy) do
-					local is_original = false
-					for _, orig in ipairs(squad.squad_bag) do
-						if orig == item then is_original = true; break end
-					end
-					if not is_original then
-						DoneObject(item)
-					end
+					DoneObject(item)
 				end
 				print("[SBDR] [Error] Verification failed in MoveAllMercsInventoryToSquadBag. Transaction aborted to prevent item loss.")
 			end
@@ -378,123 +390,56 @@ end
 --- Removes items from squad bags that are no longer eligible (e.g., due to option changes)
 --- and moves them back to mercenary inventories or the sector stash.
 function SquadBagDoneRight:EvictInvalidItems()
-	if not Game or not gv_Squads then
-		return
-	end
+    if not Game or not gv_Squads then return end
 
-	-- Suppress UI refreshes during bulk eviction
-	self.suppress_ui_refresh = true
+    self.suppress_ui_refresh = true
 
-	for squad_id, squad in pairs(gv_Squads) do
-		local bag = squad.squad_bag
+    for squad_id, squad in pairs(gv_Squads) do
+        local bag = squad.squad_bag
+        if bag and #bag > 0 then
+            for i = #bag, 1, -1 do
+                local item = bag[i]
+                if item and not IsKindOf(item, SquadBagItemClass) then
+                    local moved = false
 
-		if bag and #bag > 0 then
-			-- 1. Simulation: Identify disqualified items using a copy of the bag
-			local bag_copy = table.copy(bag)
-			local items_to_evict = {}
+                    -- Priority 1: return to a merc in the squad
+                    for _, merc_id in ipairs(squad.units or {}) do
+                        local unit = gv_UnitData and gv_UnitData[merc_id]
+                        if unit and unit:CanAddItem("Inventory", item) then
+                            if unit:AddItem("Inventory", item) then
+                                moved = true
+                                break
+                            end
+                        end
+                    end
 
-			for i = #bag_copy, 1, -1 do
-				local item = bag_copy[i]
-				-- Check if item is still allowed in squad bag based on current options
-				if item and not IsKindOf(item, SquadBagItemClass) then
-					table.remove(bag_copy, i)
-					table.insert(items_to_evict, item)
-				end
-			end
+                    -- Priority 2: sector stash
+                    if not moved then
+                        local sector_inv = GetSectorInventory(squad.CurrentSector)
+                        if sector_inv then
+                            AddItemsToInventory(sector_inv, { item })
+                            moved = true
+                        end
+                    end
 
-			if #items_to_evict > 0 then
-				-- 2. Checksum Before: Count total quantities before eviction
-				local checksum_before = {}
-				for _, item in ipairs(bag) do
-					local amt = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
-					checksum_before[item.class] = (checksum_before[item.class] or 0) + amt
-				end
+                    -- Only remove from bag if successfully placed somewhere
+                    if moved then
+                        table.remove(bag, i)
+                    else
+                        print(string.format("[SBDR] [Warning] Unable to evict item %s - keeping in squad bag.", tostring(item.class)))
+                    end
+                end
+            end
+        end
 
-				-- 3. Checksum After (Simulation): Sum bag copy and eviction list
-				local checksum_after = {}
-				for _, item in ipairs(bag_copy) do
-					local amt = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
-					checksum_after[item.class] = (checksum_after[item.class] or 0) + amt
-				end
-				for _, item in ipairs(items_to_evict) do
-					local amt = (IsKindOf(item, InventoryStackClass) and item.Amount) or 1
-					checksum_after[item.class] = (checksum_after[item.class] or 0) + amt
-				end
+        _SortItemsInBag(squad_id)
+    end
 
-				-- Verification check
-				local verified = true
-				for class, count_before in pairs(checksum_before) do
-					if count_before ~= (checksum_after[class] or 0) then
-						verified = false
-						print(string.format("[SBDR] [Error] EvictInvalidItems: Verification failed for %s", class))
-						break
-					end
-				end
+    self.suppress_ui_refresh = false
 
-				-- --- Final Application ---
-				if verified then
-					-- 4. Replace persistent bag with simulation results
-					squad.squad_bag = bag_copy
-
-					-- 5. Physically move evicted item objects to valid locations
-					for _, item in ipairs(items_to_evict) do
-						local moved = false
-
-						-- Priority 1: Move back to mercenaries in the same squad
-						if squad.units then
-							for _, merc_id in ipairs(squad.units) do
-								local unit = gv_UnitData and gv_UnitData[merc_id]
-								if unit then
-									local canAdd = unit:CanAddItem("Inventory", item)
-									if canAdd then
-										local added = unit:AddItem("Inventory", item)
-										if added then
-											moved = true
-											break
-										end
-									end
-								end
-							end
-						end
-
-						-- Priority 2: Move to Sector Stash (unlimited capacity)
-						if not moved then
-							local sector_id = squad.CurrentSector
-							if sector_id then
-								local sector_inv = GetSectorInventory(sector_id)
-								if sector_inv then
-									-- Sector inventory always has space
-									AddItemsToInventory(sector_inv, { item })
-									moved = true
-								end
-							end
-						end
-
-						-- Safety Fallback: if all else fails, keep it in the bag
-						if not moved then
-							table.insert(squad.squad_bag, item)
-							print(string.format("[SBDR] [Warning] Unable to evict item %s - returning to squad bag.", tostring(item.class)))
-						end
-					end
-				else
-					print("[SBDR] [Error] EvictInvalidItems: Verification failed. Eviction aborted for squad " .. tostring(squad_id))
-				end
-			end
-		end
-
-		-- Clean up and sort the bag after eviction
-		_SortItemsInBag(squad_id)
-	end
-
-	self.suppress_ui_refresh = false
-
-	-- Refresh current UI bag if it was modified
-	if gv_SquadBag then
-		local current_squad = gv_SquadBag.squad_id
-		if current_squad and gv_Squads[current_squad] then
-			_SortItemsInBag(current_squad)
-		end
-	end
+    if gv_SquadBag and gv_Squads[gv_SquadBag.squad_id] then
+        _SortItemsInBag(gv_SquadBag.squad_id)
+    end
 end
 
 --- Re-evaluates mod options, patches class markers, and updates all inventories accordingly.
