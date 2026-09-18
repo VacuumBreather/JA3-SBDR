@@ -848,6 +848,38 @@ end
 function OnChangeUnitSquad(unit, prevSquad, newSquad)
 	-- We rely on UnitJoinedPlayerSquad to trigger a full sector-wide re-allocation
 	-- which is more robust than trying to calculate a partial share during the move.
+	
+    -- move to the same squad
+    if not prevSquad or prevSquad==newSquad then 
+        return 
+    end
+    local prevSquadData = gv_Squads[prevSquad]
+    if not prevSquadData then -- Remnant from previous game?
+        return
+    end
+    
+    local prev_bag = prevSquadData.squad_bag
+    -- empty squad bag
+    if not prev_bag then
+        return 
+    end
+    
+    local all_units = prevSquadData.units
+    local count_units = #all_units
+    
+    -- one unit move to other squad
+    if count_units==1 then
+        local new_bag = gv_Squads[newSquad].squad_bag or {}
+        for _, item in ipairs(prev_bag) do
+            new_bag[#new_bag+1] =  item
+        end
+        gv_Squads[newSquad].squad_bag = new_bag
+        gv_Squads[prevSquad].squad_bag = {}
+        SortItemsInBag(newSquad)
+        InventoryUIResetSquadBag()
+        InventoryUIRespawn()
+        return
+    end
 end
 
 --- Initializes mod state for a brand new campaign.
